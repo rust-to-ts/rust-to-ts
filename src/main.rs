@@ -39,9 +39,9 @@ fn main() {
         ",
     );
     let [id, param, return_type]: [&str; 3] = parse_fn(&rs_fn);
-    let (mut rs_fn_id, is_async) = parse_id(&id);
-    let rs_fn_param = parse_param(&param);
-    let rs_fn_return_type = parse_return_type(&return_type);
+    let (mut rs_fn_id, is_async) = parse_fn_header(&id);
+    let rs_fn_param = parse_fn_input(&param);
+    let rs_fn_return_type = parse_fn_output(&return_type);
 
     println!("{}", rs_fn_id);
     println!("{}", rs_fn_param);
@@ -83,11 +83,12 @@ fn parse_fn(rs_fn: &str) -> [&str; 3] {
     ];
 }
 
-pub fn parse_id(rs_fn_id: &str) -> (String, bool) {
+// To do: fn name must be parsed as fn_decl
+pub fn parse_fn_header(rs_fn_header: &str) -> (String, bool) {
     let mut tx_fn_id = Vec::new();
 
     // remove paren and split param
-    let rs_fn_qualifier_and_else = rs_fn_id.split_once("fn").unwrap();
+    let rs_fn_qualifier_and_else = rs_fn_header.split_once("fn").unwrap();
 
     // push visibility
     if is_public_visibility(rs_fn_qualifier_and_else.0) {
@@ -116,11 +117,11 @@ pub fn parse_id(rs_fn_id: &str) -> (String, bool) {
     );
 }
 
-fn parse_param(rs_fn_param: &str) -> String {
+fn parse_fn_input(rs_fn_input: &str) -> String {
     let mut ts_fn_param_name_vec: Vec<&str> = Vec::new();
     let mut ts_fn_param_type_vec: Vec<&str> = Vec::new();
     // remove paren and split param
-    let mut rs_fn_param_vec: Vec<&str> = rs_fn_param[..rs_fn_param.len() - 1].split(',').collect();
+    let mut rs_fn_param_vec: Vec<&str> = rs_fn_input[..rs_fn_input.len() - 1].split(',').collect();
     // trim each param
     rs_fn_param_vec.iter_mut().for_each(|param_scalar| {
         *param_scalar = param_scalar.trim();
@@ -142,8 +143,8 @@ fn parse_param(rs_fn_param: &str) -> String {
     return ts_fn_param;
 }
 
-fn parse_return_type(rs_fn_return_type: &str) -> String {
-    return String::from(rs_fn_return_type);
+fn parse_fn_output(rs_fn_output: &str) -> String {
+    return String::from(rs_fn_output);
 }
 
 fn parse_generic_type(rs_generic_type: &str) -> String {
