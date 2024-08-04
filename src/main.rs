@@ -14,6 +14,8 @@ const TS_FUCTION_TYPE: [&str; 2] = ["Function", "void"];
 const RS_FN_QUALIFIER: [&str; 4] = ["const", "async", "unsafe", "extern"];
 const RS_FN_VISIBILITY: [&str; 1] = ["pub"];
 
+use std::collections::HashMap;
+
 struct FnSyntax {
     qualifer: Vec<String>,
     identifier: String,
@@ -38,82 +40,93 @@ fn main() {
             H: 'a + ToBytes,
         ",
     );
-    let [id, param, return_type]: [&str; 3] = parse_fn(&rs_fn);
-    let (mut rs_fn_id, is_async) = parse_fn_header(&id);
-    let rs_fn_param = parse_fn_input(&param);
-    let rs_fn_return_type = parse_fn_output(&return_type);
+    let [rs_fn_header, rs_fn_input, rs_fn_output]: [&str; 3] = parse_fn(&rs_fn);
+    let (ts_fn_header, is_async, mut generic_params_map) = parse_fn_header(&rs_fn_header);
+    let ts_fn_input = parse_fn_input(&rs_fn_input);
+    let ts_fn_output = parse_fn_output(&rs_fn_output, &mut generic_params_map);
 
-    println!("{}", rs_fn_id);
-    println!("{}", rs_fn_param);
-    println!("{}", rs_fn_return_type);
+    println!("{}", ts_fn_header);
+    println!("{}", ts_fn_input);
+    println!("{}", ts_fn_output);
+
+    // declare ts function
+    let mut ts_fn = ts_fn_header;
+
+    // push generic
+    if !generic_params_map.is_empty() {
+        ts_fn.push_str("<");
+        ts_fn.push_str(&transform_generic_params(&generic_params_map));
+        ts_fn.push_str(">");
+    }
 
     // push param
-    rs_fn_id.push_str(" ");
-    rs_fn_id.push_str("(");
-    rs_fn_id.push_str(&rs_fn_param);
-    rs_fn_id.push_str(")");
+    ts_fn.push_str(" ");
+    ts_fn.push_str("(");
+    ts_fn.push_str(&ts_fn_input);
+    ts_fn.push_str(")");
 
     // push return type
-    rs_fn_id.push_str(" ");
-    rs_fn_id.push_str(":");
-    rs_fn_id.push_str(" ");
+    ts_fn.push_str(" ");
+    ts_fn.push_str(":");
+    ts_fn.push_str(" ");
     // if async, wrap in Promise
     if is_async {
-        rs_fn_id.push_str("Promise<");
+        ts_fn.push_str("Promise<");
     }
-    rs_fn_id.push_str(&rs_fn_return_type);
+    ts_fn.push_str(&ts_fn_output);
     // if async, wrap in Promise
     if is_async {
-        rs_fn_id.push_str(">");
+        ts_fn.push_str(">");
     }
-    rs_fn_id.push_str(";");
+    ts_fn.push_str(";");
 
-    println!("{}", rs_fn_id);
+    println!("{}", ts_fn);
 }
 
 fn parse_fn(rs_fn: &str) -> [&str; 3] {
     // separate fn before params
-    let rs_fn_id_and_else = rs_fn.split_once('(').unwrap();
+    let (rs_fn_header, remainder) = rs_fn.split_once('(').unwrap();
     // separate params and return type
-    let rs_fn_param_and_return = rs_fn_id_and_else.1.split_once("->").unwrap();
+    let (rs_fn_input, rs_fn_output) = remainder.split_once("->").unwrap();
     return [
-        rs_fn_id_and_else.0.trim(),
-        rs_fn_param_and_return.0.trim(),
-        rs_fn_param_and_return.1.trim(),
+        rs_fn_header.trim(),
+        rs_fn_input.trim(),
+        rs_fn_output.trim(),
     ];
 }
 
 // To do: fn name must be parsed as fn_decl
-pub fn parse_fn_header(rs_fn_header: &str) -> (String, bool) {
-    let mut tx_fn_id = Vec::new();
+pub fn parse_fn_header(rs_fn_header: &str) -> (String, bool, HashMap<String, Vec<String>>) {
+    let mut ts_fn_header = Vec::new();
 
-    // remove paren and split param
-    let rs_fn_qualifier_and_else = rs_fn_header.split_once("fn").unwrap();
+    // split qualifier
+    let (rs_fn_qualifier, remainder) = rs_fn_header.split_once("fn").unwrap();
 
     // push visibility
-    if is_public_visibility(rs_fn_qualifier_and_else.0) {
-        tx_fn_id.push(String::from("export"));
+    if is_public_visibility(rs_fn_qualifier) {
+        ts_fn_header.push(String::from("export"));
     }
     // push function keyword
-    tx_fn_id.push(String::from("function"));
+    ts_fn_header.push(String::from("function"));
+
     // parse generic params if exists
-    if is_generic_params_exist(rs_fn_qualifier_and_else.1) {
+    let mut generic_params_map: HashMap<String, Vec<String>> = HashMap::new();
+    if is_generic_params_exist(remainder) {
         // separate function name and generic params
-        let rs_fn_name_and_generic: (&str, &str) =
-            rs_fn_qualifier_and_else.1.trim().split_once('<').unwrap();
-        // push function name first
-        tx_fn_id.push(rs_fn_name_and_generic.0.to_string());
-        let parsed_generic_params: String = parse_generic_type(rs_fn_name_and_generic.1);
-        // push generic params
-        tx_fn_id.push(String::from("<"));
-        tx_fn_id.push(parsed_generic_params);
-        tx_fn_id.push(String::from(">"));
+        let (rs_fn_ident, mut rs_fn_generic_params): (&str, &str) =
+            remainder.trim().split_once('<').unwrap();
+        rs_fn_generic_params = rs_fn_generic_params.split_once('>').unwrap().0;
+        parse_fn_generic_params(rs_fn_generic_params, &mut generic_params_map);
+
+        // push function name
+        ts_fn_header.push(rs_fn_ident.to_string());
     } else {
-        tx_fn_id.push(rs_fn_qualifier_and_else.1.trim().to_string());
+        ts_fn_header.push(remainder.trim().to_string());
     }
     return (
-        tx_fn_id.join(" "),
-        rs_fn_qualifier_and_else.0.contains("async"),
+        ts_fn_header.join(" "),
+        rs_fn_qualifier.contains("async"),
+        generic_params_map,
     );
 }
 
@@ -143,29 +156,58 @@ fn parse_fn_input(rs_fn_input: &str) -> String {
     return ts_fn_param;
 }
 
-fn parse_fn_output(rs_fn_output: &str) -> String {
-    return String::from(rs_fn_output);
+fn parse_fn_output(rs_fn_output: &str, generic_params_map: &mut HashMap<String, Vec<String>>) -> String {
+    let ts_fn_output: &str;
+    match rs_fn_output.split_once("where") {
+        Some((fn_output, where_clause)) => {
+            ts_fn_output = fn_output;
+            parse_fn_generic_params(where_clause, generic_params_map);
+        },
+        None => {
+            ts_fn_output = rs_fn_output;
+        }
+    }
+    return String::from(ts_fn_output);
 }
 
-fn parse_generic_type(rs_generic_type: &str) -> String {
-    let mut ts_generic_type_vec: Vec<&str> = Vec::new();
-
-    let rs_generic_type_vec: Vec<&str> = rs_generic_type
-        .split_once('>') // remove generic '>'
-        .unwrap()
-        .0
+fn parse_fn_generic_params(rs_fn_generic_params: &str, generic_params_map: &mut HashMap<String, Vec<String>>) {
+    let rs_fn_generic_param_vec: Vec<&str> = rs_fn_generic_params
         .split(',')
         .collect();
-    rs_generic_type_vec.iter().for_each(|generic_scalar| {
-        let generic_type = generic_scalar.trim();
-        if !generic_scalar.is_empty() {
-            if !is_lifetime_type(generic_type) {
-                ts_generic_type_vec.push(remove_attributes_and_mut_on_param(&generic_type));
+
+    rs_fn_generic_param_vec.iter().for_each(|generic_scalar| {
+        let generic_param = generic_scalar.trim();
+        if !generic_param.is_empty() {
+            if !is_lifetime_type(generic_param) {
+                let (ident, generic_bounds) = match generic_param.split_once(':') {
+                    Some(tuple) => tuple,
+                    None => {
+                        generic_params_map.entry(String::from(generic_param)).or_insert(Vec::new());
+                        return;
+                    }
+                };
+                let mut generic_bound_vec: Vec<&str> = generic_bounds.split('+').collect();
+                let mut cloned_generic_bound_vec: Vec<String> = Vec::new();
+                for mut generic_bound in generic_bound_vec {
+                    generic_bound = generic_bound.trim();
+                    if !is_lifetime_type(generic_bound) { cloned_generic_bound_vec.push(String::from(generic_bound)); };
+                }
+                let generic_bounds_entry = generic_params_map.entry(String::from(ident)).or_insert(Vec::new());
+                (*generic_bounds_entry).append(&mut cloned_generic_bound_vec);
             }
         }
     });
+}
 
-    return ts_generic_type_vec.join(", ");
+fn transform_generic_params(generic_params_map: &HashMap<String, Vec<String>>) -> String {
+    let mut ts_fn_generic_param_vec: Vec<String> = Vec::new();
+    for (key, value) in generic_params_map {
+        let mut ts_fn_generic_param = String::from(remove_attributes_and_mut_on_param(key));
+        ts_fn_generic_param.push_str(" extends ");
+        ts_fn_generic_param.push_str(&value.join(" & "));
+        ts_fn_generic_param_vec.push(ts_fn_generic_param);
+    }
+    return String::from(ts_fn_generic_param_vec.join(", "));
 }
 
 fn is_reference_type(rs_type: &str) -> bool {
