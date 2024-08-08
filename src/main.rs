@@ -140,7 +140,7 @@ fn parse_fn_input(rs_fn_input: &str) -> String {
         *param_scalar = param_scalar.trim();
         if !param_scalar.is_empty() {
             let param_name_and_type = param_scalar.split_once(':').unwrap();
-            ts_fn_param_name_vec.push(remove_attributes_and_mut_on_param(param_name_and_type.0));
+            ts_fn_param_name_vec.push(remove_attributes_and_mut_and_ref_on_param(param_name_and_type.0));
             ts_fn_param_type_vec.push(param_name_and_type.1);
         }
     });
@@ -202,7 +202,7 @@ fn parse_fn_generic_params(rs_fn_generic_params: &str, generic_params_map: &mut 
 fn transform_generic_params(generic_params_map: &HashMap<String, Vec<String>>) -> String {
     let mut ts_fn_generic_param_vec: Vec<String> = Vec::new();
     for (key, value) in generic_params_map {
-        let mut ts_fn_generic_param = String::from(remove_attributes_and_mut_on_param(key));
+        let mut ts_fn_generic_param = String::from(remove_attributes_and_mut_and_ref_on_param(key));
         ts_fn_generic_param.push_str(" extends ");
         ts_fn_generic_param.push_str(&value.join(" & "));
         ts_fn_generic_param_vec.push(ts_fn_generic_param);
@@ -243,10 +243,11 @@ fn is_self_first_param(rs_type: &str) -> bool {
     return rs_type.eq("self");
 }
 
-fn remove_attributes_and_mut_on_param(rs_fn_param_name: &str) -> &str {
+fn remove_attributes_and_mut_and_ref_on_param(rs_fn_param_name: &str) -> &str {
     // 1. remove macro attribute #[]
     // 2. remove "mut"
+    // 3. remove "ref"
     let rs_fn_param_name_vec: Vec<&str> = rs_fn_param_name.split(' ').collect();
-    // last element is name
+    // last element is the name
     return rs_fn_param_name_vec[rs_fn_param_name_vec.len() - 1];
 }
